@@ -74,3 +74,77 @@ int main() {
     return 0;
 }
 
+void *writer(void *param) {
+    int id = (intptr_t)param;
+
+    struct timespec reqTime, enterTime, exitTime;
+    clock_gettime(CLOCK_REALTIME, &reqTime);
+
+    time_t my_time = time(NULL);
+    struct tm *timeinfo = localtime(&my_time);
+    printf("Request by Writer Thread %d at %02d:%02d\n", id, timeinfo->tm_min, timeinfo->tm_sec);
+
+    sem_wait(&rwmutex);
+
+    clock_gettime(CLOCK_REALTIME, &enterTime);
+    my_time = time(NULL);
+    timeinfo = localtime(&my_time);
+    wrand_int = (rand() % 4) + 1;
+    printf("\tEntry by Writer Thread %d at %02d:%02d | Will take t = %d sec to write\n", id, timeinfo->tm_min, timeinfo->tm_sec, wrand_int);
+
+    sleep(wrand_int);
+
+    clock_gettime(CLOCK_REALTIME, &exitTime);
+    my_time = time(NULL);
+    timeinfo = localtime(&my_time);
+    printf("\t\tExit by Writer Thread %d at %02d:%02d\n", id, timeinfo->tm_min, timeinfo->tm_sec);
+
+    sem_post(&rwmutex);
+
+    sem_wait(&avgmutex);
+    avg_time += ((enterTime.tv_sec - reqTime.tv_sec) * 1000000 + (enterTime.tv_nsec - reqTime.tv_nsec) / 1000);
+    sem_post(&avgmutex);
+
+    return NULL;
+}
+
+void *reader(void *param) {
+    struct read_info *ptr = (struct read_info *)param;
+
+    struct timespec reqTime, enterTime, exitTime;
+    clock_gettime(CLOCK_REALTIME, &reqTime);
+
+    time_t my_time = time(NULL);
+    struct tm *timeinfo = localtime(&my_time);
+    printf("Request by Reader Thread %d at %02d:%02d\n", ptr->id, timeinfo->tm_min, timeinfo->tm_sec);
+
+    sem_wait(&mutex);
+    read_count++;
+    if (read_count == 1)
+        sem_wait(&rwmutex);
+    sem_post(&mutex);
+
+    clock_gettime(CLOCK_REALTIME, &enterTime);
+    my_time = time(NULL);
+    timeinfo = localtime(&my_time);
+    printf("\tEntry by Reader Thread %d at %02d:%02d | Will take t = %d sec to read\n", ptr->id, timeinfo->tm_min, timeinfo->tm_sec, ptr->time);
+
+    sleep(ptr->time);
+
+    sem_wait(&mutex);
+    read_count--;
+    if (read_count == 0)
+        sem_post(&rwmutex);
+
+    clock_gettime(CLOCK_REALTIME, &exitTime);
+    my_time = time(NULL);
+    timeinfo = localtime(&my_time);
+    printf("\t\tExit by Reader Thread %d at %02d:%02d\n", ptr->id, timeinfo->tm_min, timeinfo->tm_sec);
+    sem_post(&mutex);
+
+    sem_wait(&avgmutex);
+    avg_time += ((enterTime.tv_sec - reqTime.tv_sec) * 1000000 + (enterTime.tv_nsec - reqTime.tv_nsec) / 1000);
+    sem_post(&avgmutex);
+
+    return NULL;
+}
